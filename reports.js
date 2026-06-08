@@ -8,29 +8,29 @@ const REPORTS = [
   // 1 -------------------------------------------------------------------------
   {
     id: 1,
-    title: 'Open Work Orders by Status',
+    title: 'Open Service Orders by Status',
     description: 'All open service orders grouped by status and priority, with customer and assigned technician.',
-    columns: ['WO Number','Customer','Address','Status','Priority','Service Type','Assigned Tech','Scheduled Date','Days Open','Est. Revenue'],
+    columns: ['Order #','Customer','Address','Status','Priority','Order Type','Assigned Tech','Scheduled Date','Days Open','Est. Revenue'],
     sql: (db, f) => `
       SELECT TOP 500
-        wo.WorkOrderNo        AS [WO Number],
+        so.OrderNo            AS [Order #],
         c.CustomerName        AS [Customer],
         c.Address             AS [Address],
-        wo.Status             AS [Status],
-        wo.Priority           AS [Priority],
-        wo.ServiceType        AS [Service Type],
+        so.Status             AS [Status],
+        so.Priority           AS [Priority],
+        so.OrderType          AS [Order Type],
         ISNULL(e.FullName,'Unassigned') AS [Assigned Tech],
-        CONVERT(varchar,wo.ScheduledDate,101) AS [Scheduled Date],
-        DATEDIFF(day, wo.CreatedDate, GETDATE()) AS [Days Open],
-        ISNULL(wo.EstimatedRevenue, 0) AS [Est. Revenue]
-      FROM   [${db}]..WorkOrder wo
-      JOIN   [${db}]..Customer  c  ON c.CustomerID  = wo.CustomerID
-      LEFT JOIN [${db}]..Employee e ON e.EmployeeID = wo.TechnicianID
-      WHERE  wo.Status NOT IN ('Closed','Cancelled','Invoiced')
+        CONVERT(varchar,so.ScheduledDate,101) AS [Scheduled Date],
+        DATEDIFF(day, so.CreatedDate, GETDATE()) AS [Days Open],
+        ISNULL(so.EstimatedRevenue, 0) AS [Est. Revenue]
+      FROM   [${db}]..ServiceOrder so
+      JOIN   [${db}]..Customer     c  ON c.CustomerID = so.CustomerID
+      LEFT JOIN [${db}]..Employee  e  ON e.EmployeeID = so.TechID
+      WHERE  so.Status NOT IN ('Closed','Cancelled','Invoiced')
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.dates('wo', 'ScheduledDate')}
-      ORDER BY wo.Priority DESC, wo.ScheduledDate ASC
+        ${f.dates('so', 'ScheduledDate')}
+      ORDER BY so.Priority DESC, so.ScheduledDate ASC
     `,
   },
 
@@ -65,63 +65,63 @@ const REPORTS = [
   // 3 -------------------------------------------------------------------------
   {
     id: 3,
-    title: 'Service Contract Renewal Pipeline',
-    description: 'Active service contracts expiring within the selected date range (default: next 90 days).',
-    columns: ['Customer','Contract #','Contract Type','Equipment Covered','Start Date','Expiry Date','Days Until Expiry','Annual Value','Auto-Renew'],
+    title: 'Contract Renewal Pipeline',
+    description: 'Active maintenance contracts expiring within the selected date range (default: next 90 days).',
+    columns: ['Customer','Contract #','Contract Type','Asset Covered','Start Date','Expiry Date','Days Until Expiry','Annual Value','Auto-Renew'],
     sql: (db, f) => `
       SELECT TOP 500
         c.CustomerName      AS [Customer],
-        sc.ContractNo       AS [Contract #],
-        sc.ContractType     AS [Contract Type],
-        ISNULL(sc.EquipmentDescription,'Multiple') AS [Equipment Covered],
-        CONVERT(varchar,sc.StartDate,  101) AS [Start Date],
-        CONVERT(varchar,sc.ExpiryDate, 101) AS [Expiry Date],
-        DATEDIFF(day,GETDATE(),sc.ExpiryDate) AS [Days Until Expiry],
-        sc.AnnualValue      AS [Annual Value],
-        CASE sc.AutoRenew WHEN 1 THEN 'Yes' ELSE 'No' END AS [Auto-Renew]
-      FROM   [${db}]..ServiceContract sc
-      JOIN   [${db}]..Customer         c ON c.CustomerID = sc.CustomerID
-      WHERE  sc.Status = 'Active'
+        ct.ContractNo       AS [Contract #],
+        ct.ContractType     AS [Contract Type],
+        ISNULL(ct.AssetDescription,'Multiple') AS [Asset Covered],
+        CONVERT(varchar,ct.StartDate,  101) AS [Start Date],
+        CONVERT(varchar,ct.ExpiryDate, 101) AS [Expiry Date],
+        DATEDIFF(day,GETDATE(),ct.ExpiryDate) AS [Days Until Expiry],
+        ct.AnnualValue      AS [Annual Value],
+        CASE ct.AutoRenew WHEN 1 THEN 'Yes' ELSE 'No' END AS [Auto-Renew]
+      FROM   [${db}]..Contract ct
+      JOIN   [${db}]..Customer  c ON c.CustomerID = ct.CustomerID
+      WHERE  ct.Status = 'Active'
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.datesOrDefault('sc', 'ExpiryDate',
-            'sc.ExpiryDate >= GETDATE()',
-            'sc.ExpiryDate <= DATEADD(day,90,GETDATE())')}
-      ORDER BY sc.ExpiryDate ASC
+        ${f.datesOrDefault('ct', 'ExpiryDate',
+            'ct.ExpiryDate >= GETDATE()',
+            'ct.ExpiryDate <= DATEADD(day,90,GETDATE())')}
+      ORDER BY ct.ExpiryDate ASC
     `,
   },
 
   // 4 -------------------------------------------------------------------------
   {
     id: 4,
-    title: 'Equipment Service History',
-    description: 'Full service history per equipment unit — great for warranty tracking and failure patterns.',
-    columns: ['Customer','Equipment ID','Equipment Type','Make / Model','Serial #','Install Date','Service Date','WO Number','Service Type','Tech','Labour Hrs','Parts Cost','Total Cost'],
+    title: 'Asset Service History',
+    description: 'Full service history per asset — great for warranty tracking and failure pattern analysis.',
+    columns: ['Customer','Asset ID','Asset Class','Make / Model','Serial #','Install Date','Service Date','Order #','Order Type','Tech','Labour Hrs','Parts Cost','Total Cost'],
     sql: (db, f) => `
       SELECT TOP 500
         c.CustomerName   AS [Customer],
-        eq.EquipmentID   AS [Equipment ID],
-        eq.EquipmentType AS [Equipment Type],
-        CONCAT(eq.Make,' ',eq.Model) AS [Make / Model],
-        eq.SerialNo      AS [Serial #],
-        CONVERT(varchar,eq.InstallDate,101)   AS [Install Date],
-        CONVERT(varchar,wo.CompletedDate,101) AS [Service Date],
-        wo.WorkOrderNo   AS [WO Number],
-        wo.ServiceType   AS [Service Type],
+        a.AssetID        AS [Asset ID],
+        a.AssetClass     AS [Asset Class],
+        CONCAT(a.Make,' ',a.Model) AS [Make / Model],
+        a.SerialNo       AS [Serial #],
+        CONVERT(varchar,a.InstallDate,101)    AS [Install Date],
+        CONVERT(varchar,so.CompletedDate,101) AS [Service Date],
+        so.OrderNo       AS [Order #],
+        so.OrderType     AS [Order Type],
         e.FullName       AS [Tech],
-        wol.LabourHours  AS [Labour Hrs],
-        wol.PartsCost    AS [Parts Cost],
-        wol.TotalCost    AS [Total Cost]
-      FROM   [${db}]..Equipment   eq
-      JOIN   [${db}]..Customer     c   ON c.CustomerID   = eq.CustomerID
-      JOIN   [${db}]..WorkOrder    wo  ON wo.EquipmentID  = eq.EquipmentID
-      LEFT JOIN [${db}]..Employee   e  ON e.EmployeeID   = wo.TechnicianID
-      LEFT JOIN [${db}]..WorkOrderLabour wol ON wol.WorkOrderID = wo.WorkOrderID
-      WHERE  wo.Status IN ('Closed','Invoiced')
+        ol.LaborHours    AS [Labour Hrs],
+        ol.PartsCost     AS [Parts Cost],
+        ol.TotalCost     AS [Total Cost]
+      FROM   [${db}]..Asset        a
+      JOIN   [${db}]..Customer      c   ON c.CustomerID  = a.CustomerID
+      JOIN   [${db}]..ServiceOrder  so  ON so.AssetID    = a.AssetID
+      LEFT JOIN [${db}]..Employee   e   ON e.EmployeeID  = so.TechID
+      LEFT JOIN [${db}]..OrderLabour ol ON ol.OrderID    = so.OrderID
+      WHERE  so.Status IN ('Closed','Invoiced')
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.dates('wo', 'CompletedDate')}
-      ORDER BY eq.EquipmentID, wo.CompletedDate DESC
+        ${f.dates('so', 'CompletedDate')}
+      ORDER BY a.AssetID, so.CompletedDate DESC
     `,
   },
 
@@ -129,31 +129,31 @@ const REPORTS = [
   {
     id: 5,
     title: 'Technician Productivity Report',
-    description: 'Work orders completed, billable hours, and revenue per technician. Default: current month.',
-    columns: ['Technician','Trade','WOs Completed','Billable Hrs','Avg Hrs/WO','Labour Revenue','Parts Revenue','Total Revenue','Callback Rate %'],
+    description: 'Orders completed, billable hours, and revenue per technician. Default: current month.',
+    columns: ['Technician','Specialty','Orders Completed','Billable Hrs','Avg Hrs/Order','Labour Revenue','Parts Revenue','Total Revenue','Rework Rate %'],
     sql: (db, f) => `
       SELECT
         e.FullName        AS [Technician],
-        e.Trade           AS [Trade],
-        COUNT(wo.WorkOrderID)         AS [WOs Completed],
-        SUM(wol.BillableHours)        AS [Billable Hrs],
-        AVG(wol.BillableHours)        AS [Avg Hrs/WO],
-        SUM(wol.LabourRevenue)        AS [Labour Revenue],
-        SUM(wol.PartsRevenue)         AS [Parts Revenue],
-        SUM(wol.TotalRevenue)         AS [Total Revenue],
+        e.Specialty       AS [Specialty],
+        COUNT(so.OrderID)             AS [Orders Completed],
+        SUM(ol.BillableHours)         AS [Billable Hrs],
+        AVG(ol.BillableHours)         AS [Avg Hrs/Order],
+        SUM(ol.LaborRevenue)          AS [Labour Revenue],
+        SUM(ol.PartsRevenue)          AS [Parts Revenue],
+        SUM(ol.TotalRevenue)          AS [Total Revenue],
         CAST(
-          100.0 * SUM(CASE WHEN wo.IsCallback = 1 THEN 1 ELSE 0 END)
-          / NULLIF(COUNT(wo.WorkOrderID),0)
-        AS decimal(5,1))              AS [Callback Rate %]
+          100.0 * SUM(CASE WHEN so.IsRework = 1 THEN 1 ELSE 0 END)
+          / NULLIF(COUNT(so.OrderID),0)
+        AS decimal(5,1))              AS [Rework Rate %]
       FROM   [${db}]..Employee       e
-      JOIN   [${db}]..WorkOrder      wo  ON wo.TechnicianID = e.EmployeeID
-      LEFT JOIN [${db}]..WorkOrderLabour wol ON wol.WorkOrderID = wo.WorkOrderID
-      WHERE  wo.Status IN ('Closed','Invoiced')
+      JOIN   [${db}]..ServiceOrder   so ON so.TechID     = e.EmployeeID
+      LEFT JOIN [${db}]..OrderLabour ol ON ol.OrderID    = so.OrderID
+      WHERE  so.Status IN ('Closed','Invoiced')
         ${f.company('c')}
-        ${f.datesOrDefault('wo', 'CompletedDate',
-            'wo.CompletedDate >= DATEADD(month, DATEDIFF(month,0,GETDATE()), 0)',
-            'wo.CompletedDate <  DATEADD(month, DATEDIFF(month,0,GETDATE())+1, 0)')}
-      GROUP BY e.FullName, e.Trade
+        ${f.datesOrDefault('so', 'CompletedDate',
+            'so.CompletedDate >= DATEADD(month, DATEDIFF(month,0,GETDATE()), 0)',
+            'so.CompletedDate <  DATEADD(month, DATEDIFF(month,0,GETDATE())+1, 0)')}
+      GROUP BY e.FullName, e.Specialty
       ORDER BY [Total Revenue] DESC
     `,
   },
@@ -161,34 +161,34 @@ const REPORTS = [
   // 6 -------------------------------------------------------------------------
   {
     id: 6,
-    title: 'Job Cost vs. Budget',
-    description: 'Actual vs. budgeted cost breakdown per construction job — flags over-budget items.',
-    columns: ['Job #','Job Name','Customer','PM','Start Date','Budget Labour','Actual Labour','Budget Materials','Actual Materials','Budget Total','Actual Total','Variance $','Variance %'],
+    title: 'Project Cost vs. Budget',
+    description: 'Actual vs. budgeted cost breakdown per project — flags over-budget items.',
+    columns: ['Project #','Project Name','Customer','Manager','Start Date','Labor Budget','Labor Actual','Materials Budget','Materials Actual','Total Budget','Total Actual','Variance $','Variance %'],
     sql: (db, f) => `
       SELECT TOP 200
-        j.JobNo           AS [Job #],
-        j.JobName         AS [Job Name],
-        c.CustomerName    AS [Customer],
-        pm.FullName       AS [PM],
-        CONVERT(varchar,j.StartDate,101) AS [Start Date],
-        j.BudgetLabour    AS [Budget Labour],
-        j.ActualLabour    AS [Actual Labour],
-        j.BudgetMaterials AS [Budget Materials],
-        j.ActualMaterials AS [Actual Materials],
-        j.BudgetTotal     AS [Budget Total],
-        j.ActualTotal     AS [Actual Total],
-        j.ActualTotal - j.BudgetTotal AS [Variance $],
+        p.ProjectNo         AS [Project #],
+        p.ProjectName       AS [Project Name],
+        c.CustomerName      AS [Customer],
+        m.FullName          AS [Manager],
+        CONVERT(varchar,p.StartDate,101) AS [Start Date],
+        p.LaborBudget       AS [Labor Budget],
+        p.LaborActual       AS [Labor Actual],
+        p.MaterialBudget    AS [Materials Budget],
+        p.MaterialActual    AS [Materials Actual],
+        p.TotalBudget       AS [Total Budget],
+        p.TotalActual       AS [Total Actual],
+        p.TotalActual - p.TotalBudget AS [Variance $],
         CAST(
-          100.0 * (j.ActualTotal - j.BudgetTotal)
-          / NULLIF(j.BudgetTotal, 0)
-        AS decimal(7,1))  AS [Variance %]
-      FROM   [${db}]..Job       j
-      JOIN   [${db}]..Customer   c  ON c.CustomerID  = j.CustomerID
-      LEFT JOIN [${db}]..Employee pm ON pm.EmployeeID = j.ProjectManagerID
-      WHERE  j.Status IN ('Active','Completed')
+          100.0 * (p.TotalActual - p.TotalBudget)
+          / NULLIF(p.TotalBudget, 0)
+        AS decimal(7,1))    AS [Variance %]
+      FROM   [${db}]..Project   p
+      JOIN   [${db}]..Customer   c  ON c.CustomerID  = p.CustomerID
+      LEFT JOIN [${db}]..Employee m  ON m.EmployeeID = p.ManagerID
+      WHERE  p.Status IN ('Active','Completed')
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.dates('j', 'StartDate')}
+        ${f.dates('p', 'StartDate')}
       ORDER BY [Variance %] DESC
     `,
   },
@@ -232,32 +232,32 @@ const REPORTS = [
   {
     id: 8,
     title: 'Preventive Maintenance Schedule',
-    description: 'PM visits due within the selected date range. Default: next 60 days plus overdue.',
-    columns: ['Due Date','Days Until Due','Customer','Equipment','Serial #','PM Type','Frequency','Last Completed','Assigned Tech','Contract #'],
+    description: 'Maintenance visits due within the selected date range. Default: next 60 days plus overdue.',
+    columns: ['Due Date','Days Until Due','Customer','Asset','Serial #','Maintenance Type','Frequency','Last Serviced','Assigned Tech','Contract #'],
     sql: (db, f) => `
       SELECT TOP 300
-        CONVERT(varchar,pm.NextDueDate,101)   AS [Due Date],
-        DATEDIFF(day,GETDATE(),pm.NextDueDate) AS [Days Until Due],
+        CONVERT(varchar,ms.NextDueDate,101)    AS [Due Date],
+        DATEDIFF(day,GETDATE(),ms.NextDueDate) AS [Days Until Due],
         c.CustomerName  AS [Customer],
-        CONCAT(eq.Make,' ',eq.Model,' — ',eq.EquipmentType) AS [Equipment],
-        eq.SerialNo     AS [Serial #],
-        pm.PMType       AS [PM Type],
-        pm.Frequency    AS [Frequency],
-        CONVERT(varchar,pm.LastCompletedDate,101) AS [Last Completed],
+        CONCAT(a.Make,' ',a.Model,' — ',a.AssetClass) AS [Asset],
+        a.SerialNo      AS [Serial #],
+        ms.MaintenanceType AS [Maintenance Type],
+        ms.Frequency    AS [Frequency],
+        CONVERT(varchar,ms.LastServiceDate,101)  AS [Last Serviced],
         ISNULL(e.FullName,'Unassigned')          AS [Assigned Tech],
-        ISNULL(sc.ContractNo,'N/A')              AS [Contract #]
-      FROM   [${db}]..PMSchedule      pm
-      JOIN   [${db}]..Equipment        eq ON eq.EquipmentID  = pm.EquipmentID
-      JOIN   [${db}]..Customer          c ON c.CustomerID    = eq.CustomerID
-      LEFT JOIN [${db}]..Employee        e ON e.EmployeeID   = pm.DefaultTechID
-      LEFT JOIN [${db}]..ServiceContract sc ON sc.ContractID = pm.ContractID
-      WHERE  pm.Status = 'Active'
+        ISNULL(ct.ContractNo,'N/A')              AS [Contract #]
+      FROM   [${db}]..MaintenanceSchedule ms
+      JOIN   [${db}]..Asset                a  ON a.AssetID     = ms.AssetID
+      JOIN   [${db}]..Customer              c  ON c.CustomerID  = a.CustomerID
+      LEFT JOIN [${db}]..Employee           e  ON e.EmployeeID  = ms.DefaultTechID
+      LEFT JOIN [${db}]..Contract          ct  ON ct.ContractID = ms.ContractID
+      WHERE  ms.Status = 'Active'
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.datesOrDefault('pm', 'NextDueDate',
+        ${f.datesOrDefault('ms', 'NextDueDate',
             null,
-            'pm.NextDueDate <= DATEADD(day,60,GETDATE())')}
-      ORDER BY pm.NextDueDate ASC
+            'ms.NextDueDate <= DATEADD(day,60,GETDATE())')}
+      ORDER BY ms.NextDueDate ASC
     `,
   },
 
@@ -265,35 +265,35 @@ const REPORTS = [
   {
     id: 9,
     title: 'Parts Usage & Inventory Report',
-    description: 'Top parts consumed in service calls. Default: current quarter. Stock alerts included.',
-    columns: ['Part #','Description','Category','Qty Used (QTR)','Qty On Hand','Reorder Point','Status','Unit Cost','Total Cost Used','Avg per WO'],
+    description: 'Top parts consumed in service orders. Default: current quarter. Stock alerts included.',
+    columns: ['Part #','Description','Category','Qty Used (QTR)','Stock Qty','Min Stock Level','Status','Unit Cost','Total Cost Used','Avg per Order'],
     sql: (db, f) => `
       SELECT TOP 200
         p.PartNo          AS [Part #],
         p.Description     AS [Description],
         p.Category        AS [Category],
-        SUM(wop.QuantityUsed) AS [Qty Used (QTR)],
-        p.QtyOnHand       AS [Qty On Hand],
-        p.ReorderPoint    AS [Reorder Point],
+        SUM(op.QtyUsed)   AS [Qty Used (QTR)],
+        p.StockQty        AS [Stock Qty],
+        p.MinStockLevel   AS [Min Stock Level],
         CASE
-          WHEN p.QtyOnHand <= 0              THEN 'OUT OF STOCK'
-          WHEN p.QtyOnHand <= p.ReorderPoint THEN 'REORDER NOW'
+          WHEN p.StockQty <= 0               THEN 'OUT OF STOCK'
+          WHEN p.StockQty <= p.MinStockLevel THEN 'REORDER NOW'
           ELSE 'OK'
         END               AS [Status],
         p.UnitCost        AS [Unit Cost],
-        SUM(wop.QuantityUsed * p.UnitCost) AS [Total Cost Used],
-        CAST(AVG(CAST(wop.QuantityUsed AS float)) AS decimal(7,2)) AS [Avg per WO]
-      FROM   [${db}]..Part          p
-      JOIN   [${db}]..WorkOrderPart wop ON wop.PartID     = p.PartID
-      JOIN   [${db}]..WorkOrder     wo  ON wo.WorkOrderID = wop.WorkOrderID
-      JOIN   [${db}]..Customer       c  ON c.CustomerID   = wo.CustomerID
+        SUM(op.QtyUsed * p.UnitCost) AS [Total Cost Used],
+        CAST(AVG(CAST(op.QtyUsed AS float)) AS decimal(7,2)) AS [Avg per Order]
+      FROM   [${db}]..Part         p
+      JOIN   [${db}]..OrderPart    op ON op.PartID   = p.PartID
+      JOIN   [${db}]..ServiceOrder so ON so.OrderID  = op.OrderID
+      JOIN   [${db}]..Customer      c ON c.CustomerID = so.CustomerID
       WHERE  1=1
         ${f.company('c')}
         ${f.customer('c')}
-        ${f.datesOrDefault('wo', 'CompletedDate',
-            'wo.CompletedDate >= DATEADD(quarter, DATEDIFF(quarter,0,GETDATE()), 0)',
+        ${f.datesOrDefault('so', 'CompletedDate',
+            'so.CompletedDate >= DATEADD(quarter, DATEDIFF(quarter,0,GETDATE()), 0)',
             null)}
-      GROUP BY p.PartNo, p.Description, p.Category, p.QtyOnHand, p.ReorderPoint, p.UnitCost
+      GROUP BY p.PartNo, p.Description, p.Category, p.StockQty, p.MinStockLevel, p.UnitCost
       ORDER BY [Qty Used (QTR)] DESC
     `,
   },
@@ -302,8 +302,8 @@ const REPORTS = [
   {
     id: 10,
     title: 'Customer Profitability Summary',
-    description: 'Revenue, direct cost, and gross margin per customer. Default: current year-to-date.',
-    columns: ['Customer','City','Customer Type','WOs Completed','Contracts','YTD Revenue','YTD Direct Cost','Gross Profit','Margin %','Avg WO Value'],
+    description: 'Revenue, cost of revenue, and gross margin per customer. Default: current year-to-date.',
+    columns: ['Customer','City','Segment','Orders Completed','Contracts','YTD Revenue','YTD Cost','Gross Profit','Margin %','Avg Order Value'],
     sql: (db, f) => {
       const dateFromExpr = f.dateFrom
         ? '@dateFrom'
@@ -313,30 +313,30 @@ const REPORTS = [
         : 'GETDATE()';
       return `
         SELECT TOP 200
-          c.CustomerName   AS [Customer],
-          c.City           AS [City],
-          c.CustomerType   AS [Customer Type],
-          COUNT(DISTINCT wo.WorkOrderID)   AS [WOs Completed],
-          COUNT(DISTINCT sc.ContractID)    AS [Contracts],
-          SUM(i.InvoiceTotal)              AS [YTD Revenue],
-          SUM(i.DirectCost)                AS [YTD Direct Cost],
-          SUM(i.InvoiceTotal - i.DirectCost) AS [Gross Profit],
+          c.CustomerName    AS [Customer],
+          c.City            AS [City],
+          c.ClientSegment   AS [Segment],
+          COUNT(DISTINCT so.OrderID)    AS [Orders Completed],
+          COUNT(DISTINCT ct.ContractID) AS [Contracts],
+          SUM(i.InvoiceTotal)           AS [YTD Revenue],
+          SUM(i.CostOfRevenue)          AS [YTD Cost],
+          SUM(i.InvoiceTotal - i.CostOfRevenue) AS [Gross Profit],
           CAST(
-            100.0 * SUM(i.InvoiceTotal - i.DirectCost)
+            100.0 * SUM(i.InvoiceTotal - i.CostOfRevenue)
             / NULLIF(SUM(i.InvoiceTotal),0)
-          AS decimal(5,1))                 AS [Margin %],
-          CAST(AVG(CAST(i.InvoiceTotal AS float)) AS decimal(10,2)) AS [Avg WO Value]
-        FROM   [${db}]..Customer        c
-        LEFT JOIN [${db}]..Invoice        i  ON i.CustomerID  = c.CustomerID
-                                           AND i.InvoiceDate BETWEEN ${dateFromExpr} AND ${dateToExpr}
-        LEFT JOIN [${db}]..WorkOrder      wo ON wo.CustomerID = c.CustomerID
-                                           AND wo.Status IN ('Closed','Invoiced')
-                                           AND wo.CompletedDate BETWEEN ${dateFromExpr} AND ${dateToExpr}
-        LEFT JOIN [${db}]..ServiceContract sc ON sc.CustomerID = c.CustomerID AND sc.Status = 'Active'
+          AS decimal(5,1))              AS [Margin %],
+          CAST(AVG(CAST(i.InvoiceTotal AS float)) AS decimal(10,2)) AS [Avg Order Value]
+        FROM   [${db}]..Customer      c
+        LEFT JOIN [${db}]..Invoice     i  ON i.CustomerID  = c.CustomerID
+                                        AND i.InvoiceDate BETWEEN ${dateFromExpr} AND ${dateToExpr}
+        LEFT JOIN [${db}]..ServiceOrder so ON so.CustomerID = c.CustomerID
+                                        AND so.Status IN ('Closed','Invoiced')
+                                        AND so.CompletedDate BETWEEN ${dateFromExpr} AND ${dateToExpr}
+        LEFT JOIN [${db}]..Contract   ct  ON ct.CustomerID = c.CustomerID AND ct.Status = 'Active'
         WHERE  1=1
           ${f.company('c')}
           ${f.customer('c')}
-        GROUP BY c.CustomerName, c.City, c.CustomerType
+        GROUP BY c.CustomerName, c.City, c.ClientSegment
         HAVING SUM(i.InvoiceTotal) > 0
         ORDER BY [YTD Revenue] DESC
       `;

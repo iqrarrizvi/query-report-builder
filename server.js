@@ -108,10 +108,10 @@ app.get('/companies', async (req, res) => {
     const db = dbs.recordset[0]?.name;
     if (!db) { await pool.close(); return res.json([]); }
 
-    // Try common Jonas schema locations for company code lists
+    // Try common schema locations for company/branch code lists
     const queries = [
       `SELECT DISTINCT CompanyCode AS code, CompanyName AS name FROM [${db}]..Company ORDER BY CompanyCode`,
-      `SELECT DISTINCT CompNo AS code, CompName AS name FROM [${db}]..Company ORDER BY CompNo`,
+      `SELECT DISTINCT BranchCode AS code, BranchName AS name FROM [${db}]..Branch ORDER BY BranchCode`,
       `SELECT DISTINCT CompanyCode AS code, CompanyCode AS name FROM [${db}]..Customer WHERE CompanyCode IS NOT NULL ORDER BY CompanyCode`,
     ];
     for (const q of queries) {
