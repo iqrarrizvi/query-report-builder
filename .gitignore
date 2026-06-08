@@ -1,0 +1,11 @@
+node_modules/
+output/
+.env
+*.xlsx
+*.log
+
+# Internal — not for public repo
+proposal/
+excel-templates/
+ebi-templates/
+ebi-json-templates/

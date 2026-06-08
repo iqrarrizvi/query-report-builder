@@ -1,0 +1,19 @@
+{
+  "name": "jonas-reporter",
+  "version": "1.0.0",
+  "description": "Construction & HVAC report generator — runs 10 pre-built SQL reports and exports to Excel",
+  "main": "report-generator.js",
+  "scripts": {
+    "start": "node server.js",
+    "reports": "node report-generator.js",
+    "sample": "node sample-report.js",
+    "explore": "node explore-schema.js"
+  },
+  "dependencies": {
+    "docx": "^9.6.1",
+    "dotenv": "16.6.1",
+    "exceljs": "^4.4.0",
+    "express": "^5.2.1",
+    "mssql": "^11.0.1"
+  }
+}
